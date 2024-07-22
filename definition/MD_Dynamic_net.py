@@ -82,8 +82,10 @@ class MD_Dynamic_net(nn.Module):
         :param post_masks: batch * interval_num * post_num 节点掩码（标记节点是否存在）
         :return:
         """
+                    
 
-        # lstm层 token级别的语义嵌入，捕获相邻token之间的语义依赖关系
+        # Single-stage Embedding
+        #the initial information
         content_embeddings = content_embeddings.view(-1, self.seq_len, self.input_dim)
         content_mask = content_mask.view(-1, self.seq_len)
         content_embeddings, word_score = self.word_encoder(content_embeddings,
@@ -92,7 +94,7 @@ class MD_Dynamic_net(nn.Module):
 
         content_embeddings = self.bn(content_embeddings)
 
-        # linear 信息
+        #Sequence Attention Module
         t_content_embeddings, _ = self.t_lstm(content_embeddings)
         t_content_embeddings = t_content_embeddings.repeat(1, self.interval_num, 1)
         t_content_embeddings = t_content_embeddings.view(-1, self.post_num, self.t_hidden_dim)
@@ -101,18 +103,18 @@ class MD_Dynamic_net(nn.Module):
         t_content_embeddings = t_content_embeddings.view(-1, self.interval_num, self.t_hidden_dim)
         # t_content_embeddings = self.t_bn(t_content_embeddings)
 
-        # structure信息 根据 关系矩阵 在各个时间阶段上 进行语义向量的融合
+        # Graph Attention Module
         st_content_embeddings = self.gat(content_embeddings, adj, graph_per_interval)
         repr = content_embeddings
 
-        # 注意力机制，节点向量矩阵 融合为 传播树的全局表示 -> 不同时间阶段的传播树的全局表示
+        # 
         st_content_embeddings = st_content_embeddings.view(-1, self.post_num, self.hidden_dim * self.nheads)
         post_masks = post_masks.view(-1, self.post_num)
         st_content_embeddings, st_post_score = self.st_att_post(st_content_embeddings, post_masks)
         st_content_embeddings = st_content_embeddings.view(-1, self.interval_num, self.hidden_dim * self.nheads)
         # st_content_embeddings = self.st_bn(st_content_embeddings)
 
-        # lstm graph级别的语义嵌入 ，建模相邻时间阶段的信息传播的动态演化过程
+        # Multi-stage Dynamic Learning
         content_embeddings = torch.cat([st_content_embeddings, t_content_embeddings], dim=-1)
         content_embeddings_T = content_embeddings.permute(0, 2, 1)
         distance = torch.bmm(content_embeddings, content_embeddings_T)
@@ -124,13 +126,10 @@ class MD_Dynamic_net(nn.Module):
 
         content_embeddings, _ = self.lstm_post(content_embeddings)
 
-        #使各阶段呈现差异性
-
-
-        # 池化，对 不同时间阶段的传播树的全局表示 进行融合得到 各个样本的最终表示
+        #combining all stage sub-graphs’ representation  
         content_embeddings = self.pool_graph(content_embeddings).view(-1,
                                                                       (self.t_hidden_dim + self.st_hidden_dim) * 2)
 
-        # mlp层
+        # mlp
         output = self.mlp(content_embeddings)
         return output, 1/distance, word_score, t_post_score, st_post_score
