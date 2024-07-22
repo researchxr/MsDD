@@ -19,20 +19,12 @@
 Please cite our paper:
 
 @article{hao2024multi,  
-
   title={Multi-stage dynamic disinformation detection with graph entropy guidance},  
-  
   author={Hao, Xiaorong and Liu, Bo and Yang, Xinyan and Sun, Xiangguo and Meng, Qing and Cao, Jiuxin}, 
-  
   journal={World Wide Web},
-  
   volume={27},  
-  
   number={2},  
-  
   pages={8}, 
-  
   year={2024},  
-  
   publisher={Springer}  
 }
